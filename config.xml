@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="uk.campervan1989.traficodometer" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+    <name>Trafic Odometer Editor</name>
+    <description>Renault Trafic EEPROM Odometer Editor</description>
+    <content src="index.html" />
+    <access origin="*" />
+</widget>

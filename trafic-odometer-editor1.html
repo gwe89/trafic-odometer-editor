@@ -1,0 +1,158 @@
+<title>Trafic Odometer Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one narrow column of three numbered stages (load, set, apply), read like a workshop job card. */
+:root{
+  --bg:#eef1f0; --panel:#ffffff; --fg:#17211f; --muted:#5b6866; --line:#d3dbd9;
+  --accent:#0b6e63; --accent-fg:#ffffff; --change:#fff1c7; --change-fg:#6b4a00;
+  --good:#1a7a3c; --bad:#b3261e; --code-bg:#f5f8f7;
+  --font-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1514; --panel:#172120; --fg:#e4ecea; --muted:#92a3a0; --line:#2a3836;
+  --accent:#3fbfae; --accent-fg:#06201c; --change:#4a3a0a; --change-fg:#ffd98a;
+  --good:#5cc98a; --bad:#ff8a80; --code-bg:#101918; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1514; --panel:#172120; --fg:#e4ecea; --muted:#92a3a0; --line:#2a3836;
+  --accent:#3fbfae; --accent-fg:#06201c; --change:#4a3a0a; --change-fg:#ffd98a;
+  --good:#5cc98a; --bad:#ff8a80; --code-bg:#101918; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-body);
+  padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1{font-size:26px;line-height:1.2;margin:0;font-weight:600;text-wrap:balance}
+.lede{margin:6px 0 0;color:var(--muted);max-width:60ch}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+h2{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+h2 b{color:var(--accent);font-family:var(--font-mono)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button,.btn{font:500 14px var(--font-body);padding:9px 14px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=file]{font:14px var(--font-body);color:var(--fg);max-width:100%}
+input[type=number]{font:600 22px var(--font-mono);width:100%;max-width:240px;padding:8px 12px;border-radius:7px;border:1px solid var(--line);background:var(--code-bg);color:var(--fg)}
+.status{padding:10px 12px;border-radius:7px;font-size:14px;border:1px solid var(--line);background:var(--code-bg)}
+.status.ok{border-color:var(--good)} .status.bad{border-color:var(--bad);color:var(--bad)}
+.big{font:600 30px var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted);font-size:13px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font:14px var(--font-mono);font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 11px var(--font-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td.chg{background:var(--change);color:var(--change-fg);font-weight:600}
+.ok-t{color:var(--good)}.bad-t{color:var(--bad)}
+ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.note{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+code{font-family:var(--font-mono);font-size:13px;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+</style>
+
+<main>
+<header>
+  <h1>Trafic Odometer Editor</h1>
+  <p class="lede">Reads the mileage stored in the 93C66 EEPROM of the Trafic II restyle cluster (P8200279060) and works out the bytes for a new value. It runs in your browser; nothing is uploaded.</p>
+</header>
+
+<section>
+  <h2><b>1</b> Load your dump</h2>
+  <div class="row">
+    <input type="file" id="file" accept=".bin,application/octet-stream">
+    <button id="sample" type="button">Use the example dump</button>
+  </div>
+  <p class="muted" id="src"></p>
+  <div id="status" class="status"></div>
+  <div class="tw"><table id="slots"><thead><tr><th>Slot</th><th>Bytes</th><th>Value</th><th>Check</th></tr></thead><tbody></tbody></table></div>
+  <p class="muted">Read the chip as <code>AT93C66@16</code> (512 bytes). Save the untouched dump before anything else.</p>
+</section>
+
+<section id="s2" hidden>
+  <h2><b>2</b> Set the new mileage</h2>
+  <p class="muted" style="margin:0">Current reading: <span id="cur" class="big" style="font-size:18px"></span></p>
+  <div class="row">
+    <label for="newm" class="muted">New mileage</label>
+    <input type="number" id="newm" min="3" max="999999" step="1" inputmode="numeric">
+  </div>
+  <p class="muted" id="delta" style="margin:0"></p>
+</section>
+
+<section id="s3" hidden>
+  <h2><b>3</b> Apply it</h2>
+  <p style="margin:0">In the EZP2019 software, click a word in the hex grid and type the new value. Only the highlighted words change.</p>
+  <div class="tw"><table id="words"><thead><tr><th>Row</th><th>Column</th><th>Now</th><th>Change to</th></tr></thead><tbody></tbody></table></div>
+  <ol>
+    <li>Check the words you typed against the table, then read the whole buffer once more.</li>
+    <li>Cluster unpowered, clip on, <code>AT93C66@16</code> selected. Press <b>Erase</b>, then <b>Program</b>, then <b>Verify</b>.</li>
+    <li>Press <b>Read</b> and check the new values stayed.</li>
+  </ol>
+  <div class="row">
+    <button id="copy" class="primary" type="button">Copy full dump as hex</button>
+    <span class="muted" id="copied"></span>
+  </div>
+  <p class="note">Only the odometer is changed. The service wrench is stored elsewhere and will not clear. Setting a mileage below the vehicle's true figure is illegal in the UK. Use this to match a swapped cluster to the real reading.</p>
+</section>
+</main>
+
+<script>
+const OFFS=[0x7C,0x80,0x84,0x88];
+function encSlot(n){const b0=(n>>8)&255,b1=n&255,b3=(n>>16)&255;return [b0,b1,(255-b0-b1-b3)&255,b3];}
+function decSlot(s){return (s[3]<<16)|(s[0]<<8)|s[1];}
+function slotOk(s){return ((s[0]+s[1]+s[2]+s[3])&255)===255;}
+function parseCore(b){
+  if(b.length!==512)return{ok:false,msg:'The file is '+b.length+' bytes. A 93C66 read in 16-bit mode is exactly 512 bytes.'};
+  const slots=OFFS.map(o=>{const s=Array.from(b.slice(o,o+4));return{off:o,s:s,val:decSlot(s),ok:slotOk(s)};});
+  if(!slots.every(x=>x.ok))return{ok:false,slots:slots,msg:'The check bytes do not add up, so this is not the layout this tool understands.'};
+  const v=slots.map(x=>x.val).sort((a,c)=>a-c);
+  if(!(v[1]===v[0]+1&&v[2]===v[1]+1&&v[3]===v[2]+1))return{ok:false,slots:slots,msg:'The four slots are not four consecutive values, so this is not the layout this tool understands.'};
+  const mx=v[3];const newest=slots.findIndex(x=>x.val===mx);
+  return{ok:true,slots:slots,mileage:mx,newest:newest};
+}
+function applyCore(b,n){const p=parseCore(b);const o=Uint8Array.from(b);const d=n-p.mileage;
+  p.slots.forEach(sl=>{const s=encSlot(sl.val+d);for(let j=0;j<4;j++)o[sl.off+j]=s[j];});return o;}
+function swapWords(b){const o=Uint8Array.from(b);for(let i=0;i+1<o.length;i+=2){const t=o[i];o[i]=o[i+1];o[i+1]=t;}return o;}
+function parseDump(b){const p=parseCore(b);if(p.ok){p.swapped=false;return p;}const q=parseCore(swapWords(b));if(q.ok){q.swapped=true;return q;}return p;}
+function applyMileage(b,n){const p=parseDump(b);if(p.swapped)return swapWords(applyCore(swapWords(b),n));return applyCore(b,n);}
+
+const SAMPLE="60df6a3604ff1d0060df6a3604ff1d004c9ff59cb10dfdc87edc042a80cb0265195ebc788278183b005854801f834c9ff59cb10dfdc87edc042a80cb0265195ebc788278183b005854801f830d010d078007158c0202b1000d010d078007158c0202b1001cca0000c10055031cca0000c1005503281ea613281ea613c074c902c075c802c076c702c077c60200031f0000001d2b000000002220431000031f0000001d2b0000000022204310000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009100911c7f00bf486446506e776e283c69047850000000000000070d070d2e3290016446506e776e283c69047850000000000000070d070d2e329001c03a0002000000000000000000000201c03a00020000000000000000000002010000ff000000ff00515a3d472a331620300d01ff515a3d472a331620300d01ff0031004e006b008800a500c200df00fc011929080031004e006b008800a500c200df00fc01192908002c00490066008300a000bd00da00f701145e00002c00490066008300a000bd00da00f701145e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+let dump=null, label='';
+const $=id=>document.getElementById(id);
+const hex=(a)=>Array.from(a,x=>x.toString(16).padStart(2,'0').toUpperCase()).join('');
+const fromHex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
+function load(bytes,name){
+  dump=bytes;label=name;const p=parseDump(bytes);
+  $('src').textContent=name;
+  const st=$('status'),tb=$('slots').querySelector('tbody');tb.innerHTML='';
+  if(p.slots)p.slots.forEach(x=>{const tr=document.createElement('tr');
+    tr.innerHTML='<td>0x'+x.off.toString(16).toUpperCase().padStart(3,'0')+'</td><td>'+hex(x.s).replace(/(..)/g,'$1 ').trim()+'</td><td>'+x.val+'</td><td class="'+(x.ok?'ok-t':'bad-t')+'">'+(x.ok?'OK':'Bad')+'</td>';tb.appendChild(tr);});
+  if(!p.ok){st.className='status bad';st.textContent=p.msg;$('s2').hidden=true;$('s3').hidden=true;return;}
+  st.className='status ok';st.innerHTML='Layout recognised. Mileage stored: <span class="big">'+p.mileage+'</span>'+(p.newest!==3?'<br><span class="muted">The newest value is in slot 0x'+p.slots[p.newest].off.toString(16).toUpperCase()+'. The cluster rotates through its four slots, and the tool keeps that order.</span>':'')+(p.swapped?'<br><span class="muted">This file has the two bytes of every 16-bit word swapped. The tool handles that and keeps the same byte order when you apply a change.</span>':'');
+  $('cur').textContent=p.mileage;$('s2').hidden=false;
+  const inp=$('newm');if(!inp.value)inp.value=p.mileage;
+  update();
+}
+function update(){
+  const p=parseDump(dump);if(!p.ok)return;
+  const n=parseInt($('newm').value,10);
+  const valid=Number.isInteger(n)&&n>=3&&n<=999999;
+  if(!valid){$('s3').hidden=true;$('delta').textContent='Enter a whole number from 3 to 999999.';return;}
+  const d=n-p.mileage;
+  $('delta').textContent=d===0?'Same as the current reading, so nothing changes.':(d<0?'This lowers the reading by '+(-d)+'.':'This raises the reading by '+d+'.');
+  const out=applyMileage(dump,n);
+  const tb=$('words').querySelector('tbody');tb.innerHTML='';
+  const rows=[[0x70,[0xC,0xE]],[0x80,[0,2,4,6,8,0xA]]];
+  rows.forEach(r=>r[1].forEach(c=>{const o=r[0]+c;
+    const was=hex(dump.slice(o,o+2)),now=hex(out.slice(o,o+2));
+    const col=c.toString(16).toUpperCase().padStart(2,'0')+(c+1).toString(16).toUpperCase().padStart(2,'0')+'';
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>0x'+r[0].toString(16).toUpperCase().padStart(3,'0')+'</td><td>'+col.slice(0,2).replace(/^0/,'0')+col.slice(2)+'</td><td>'+was+'</td><td'+(was!==now?' class="chg"':'')+'>'+now+'</td>';tb.appendChild(tr);}));
+  $('s3').hidden=d===0;
+  $('copy').onclick=()=>{const h=hex(out);
+    const done=()=>{$('copied').textContent='Copied.';};
+    try{navigator.clipboard.writeText(h).then(done,()=>{$('copied').textContent='Copy blocked here. Select and copy manually.';});}catch(e){$('copied').textContent='Copy blocked here.';}};
+}
+$('newm').addEventListener('input',()=>{if(dump)update();});
+$('sample').addEventListener('click',()=>{$('newm').value='';load(fromHex(SAMPLE),'Example: the original dump from this van (180343).');$('newm').value=179295;update();});
+$('file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{$('newm').value='';load(new Uint8Array(r.result),f.name);};r.readAsArrayBuffer(f);});
+load(fromHex(SAMPLE),'Example: the original dump from this van (180343). Load your own file above.');
+$('newm').value=179295;update();
+</script>

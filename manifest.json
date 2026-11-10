@@ -1,0 +1,8 @@
+{
+  "name": "Trafic Odometer Editor",
+  "short_name": "TraficOdometer",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#eef1f0",
+  "theme_color": "#0b6e63"
+}
